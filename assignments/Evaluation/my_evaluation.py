@@ -1,6 +1,6 @@
 import numpy as np
+import pandas as pd
 from collections import Counter
-from pdb import set_trace
 
 class my_evaluation:
     # Binary class or multi-class classification evaluation
@@ -145,15 +145,15 @@ class my_evaluation:
                 auc_target = 0
                 for i in order:
                     if self.actuals[i] == target:
-                        tp = tp + 1
-                        fn = fn + 1
+                        tp+=1
+                        fn-=1
                         tpr = float(tp) / (tp + fn)
                     else:
                         fp+=1
                         tn-=1
-                        p_fpr = fpr
+                        pre_fpr = fpr
                         fpr = float(fp) / (tn + fp)
-                        auc_target += tpr * (fpr - p_fpr)
+                        auc_target += tpr * (fpr - pre_fpr)
             else:
                 raise Exception("Unknown target class.")
 
