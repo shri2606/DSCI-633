@@ -17,20 +17,90 @@ class my_KNN:
         # X: pd.DataFrame, independent variables, float
         # y: list, np.array or pd.Series, dependent variables, int or str
         self.classes_ = list(set(list(y)))
-        # write your code below
+        self.X = X
+        self.y = y
         return
+
+    def dist(self,x):
+        # Calculate distances of training data to a single input data point (distances from self.X to x)
+        # Output np.array([distances to x])
+        if self.metric == "minkowski":
+            mArray = np.empty
+            c = np.array(self.X)
+            for i in range(len(c)):
+                dist = (sum((abs(c[i]-x))**self.p))**(1/self.p)
+                mArray = np.append(mArray,dist)
+            mArray = np.delete(mArray,[0])
+            distances = mArray
+            return distances
+        elif self.metric == "euclidean":
+            mArray = np.empty
+            c = np.array(self.X)
+            for i in range(len(c)):
+                dist = (sum((abs(c[i]-x))**2))**(1/2)
+                mArray = np.append(mArray,dist)
+            mArray = np.delete(mArray,[0])
+            distances = mArray
+            return distances
+        elif self.metric == "manhattan":
+            mArray = np.empty
+            c = np.array(self.X)
+            for i in range(len(c)):
+                dist = (sum((abs(c[i]-x))))
+                mArray = np.append(mArray,dist)
+            mArray = np.delete(mArray,[0])
+            distances = mArray
+            return distances
+        elif self.metric == "cosine":
+            mArray = np.empty
+            c = np.array(self.X)
+            for i in range(len(c)):
+                dist = (sum(c[i]*x))/(sqrt(sum(c[i]**2))*(sqrt(sum(x**2))))
+                mArray = np.append(mArray,1-dist)
+            mArray = np.delete(mArray,[0])    
+            distances = mArray
+            return distances
+        else:
+            raise Exception("Unknown criterion.")
+        return distances
+
+    def k_neighbors(self,x):
+        # Return the stats of the labels of k nearest neighbors to a single input data point (np.array)
+        # Output: Counter(labels of the self.n_neighbors nearest neighbors) e.g. {"Class A":3, "Class B":2}
+        distances = self.dist(x)
+        sortedDistances = np.argsort(distances)
+        BestDistances = sortedDistances[:self.n_neighbors]
+        BestDistancesLabels = []
+        for label in BestDistances:
+            BestDistancesLabels.append(self.y[label])
+        output = Counter(BestDistancesLabels)
+        return output
+
 
     def predict(self, X):
         # X: pd.DataFrame, independent variables, float
         # return predictions: list
-        # write your code below
+        probs = self.predict_proba(X)
+        predictions = [self.classes_[np.argmax(prob)] for prob in probs.to_numpy()]
         return predictions
 
     def predict_proba(self, X):
         # X: pd.DataFrame, independent variables, float
         # prob is a dict of prediction probabilities belonging to each categories
         # return probs = pd.DataFrame(list of prob, columns = self.classes_)
-        # write your code below
+        probs = []
+        try:
+            X_feature = X[self.X.columns]
+        except:
+            raise Exception("Input data mismatch.")
+
+        for x in X_feature.to_numpy():
+            neighbors = self.k_neighbors(x)
+            # Calculate the probability of data point x belonging to each class
+            # e.g. prob = {"2": 1/3, "1": 2/3}
+            prob = {key: neighbors[key] / float(self.n_neighbors) for key in self.classes_}
+            probs.append(prob)
+        probs = pd.DataFrame(probs, columns=self.classes_)
         return probs
 
 
