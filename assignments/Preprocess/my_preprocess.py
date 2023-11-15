@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.linalg import svd
-
+from copy import deepcopy
+from collections import Counter
+from pdb import set_trace
 
 class my_normalizer:
     def __init__(self, norm="Min-Max", axis = 1):
@@ -14,17 +16,64 @@ class my_normalizer:
         #     X: input matrix
         #     Calculate offsets and scalers which are used in transform()
         X_array  = np.asarray(X)
-        # Write your own code below
+        m, n = X_array.shape
+        self.offsets = []
+        self.scalers = []
+        if self.axis == 1:
+            for col in range(n):
+                offset, scaler = self.vector_norm(X_array[:, col])
+                self.offsets.append(offset)
+                self.scalers.append(scaler)
+        elif self.axis == 0:
+            for row in range(m):
+                offset, scaler = self.vector_norm(X_array[row])
+                self.offsets.append(offset)
+                self.scalers.append(scaler)
+        else:
+            raise Exception("Unknown axis.")
 
     def transform(self, X):
-        # Transform X into X_norm
         X_norm = deepcopy(np.asarray(X))
-        # Write your own code below
+        m, n = X_norm.shape
+        if self.axis == 1:
+            for col in range(n):
+                X_norm[:, col] = (X_norm[:, col]-self.offsets[col])/self.scalers[col]
+        elif self.axis == 0:
+            for row in range(m):
+                X_norm[row] = (X_norm[row]-self.offsets[row])/self.scalers[row]
+        else:
+            raise Exception("Unknown axis.")
         return X_norm
 
     def fit_transform(self, X):
         self.fit(X)
         return self.transform(X)
+
+    def vector_norm(self, x):
+        # Calculate the offset and scaler for input vector x
+        if self.norm == "Min-Max":
+            # Write your own code below
+            offset = np.min(x)
+            scaler = np.max(x) - np.min(x)
+
+        elif self.norm == "L1":
+            # Write your own code below
+            offset = 0
+            scaler = np.sum(np.abs(x))
+
+        elif self.norm == "L2":
+            # Write your own code below
+            offset = 0
+            scaler = np.sqrt(np.sum(x ** 2))
+
+        elif self.norm == "Standard_Score":
+            # Write your own code below
+            offset = np.mean(x)
+            scaler = np.std(x)
+
+        else:
+            raise Exception("Unknown normlization.")
+        return offset, scaler
 
 class my_pca:
     def __init__(self, n_components = 5):
@@ -37,16 +86,18 @@ class my_pca:
         #     X: input matrix
         #  Calculates:
         #     self.principal_components: the top n_components principal_components
-        # Vh = the transpose of V
+        #  Vh = the transpose of V
         U, s, Vh = svd(X)
         # Write your own code below
+        self.principal_components = Vh[:self.n_components].T
+
 
     def transform(self, X):
         #     X_pca = X.dot(self.principal_components)
         X_array = np.asarray(X)
-        # Write your own code below
 
-        return X_pca
+        return X_array.dot(self.principal_components)
+        
 
     def fit_transform(self, X):
         self.fit(X)
@@ -54,8 +105,8 @@ class my_pca:
 
 def stratified_sampling(y, ratio, replace = True):
     #  Inputs:
-    #     y: class labels
-    #     0 < ratio < 1: len(sample) = len(y) * ratio
+    #     y: a 1-d array of class labels
+    #     0 < ratio < 1: number of samples = len(y) * ratio
     #     replace = True: sample with replacement
     #     replace = False: sample without replacement
     #  Output:
@@ -67,6 +118,22 @@ def stratified_sampling(y, ratio, replace = True):
         raise Exception("ratio must be 0 < ratio < 1.")
     y_array = np.asarray(y)
     # Write your own code below
+    num_classes = np.unique(y_array)
+    sample = []
+
+    for cls in num_classes:
+        
+        class_indices = np.where(y_array == cls)[0]
+        num_samples = int(np.ceil(ratio * len(class_indices)))
+
+        if replace:
+           
+            sample.extend(np.random.choice(class_indices, size=num_samples, replace=True))
+        else:
+           
+            sample.extend(np.random.choice(class_indices, size=num_samples, replace=False))
+
+    sample = np.array(sample)
 
 
     return sample.astype(int)
