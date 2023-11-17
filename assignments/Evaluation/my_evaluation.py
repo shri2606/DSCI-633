@@ -1,59 +1,48 @@
-import numpy as np
-import pandas as pd
 from collections import Counter
+import numpy as np
 
 class my_evaluation:
-    # Binary class or multi-class classification evaluation
-    # Each data point can only belong to one class
-
     def __init__(self, predictions, actuals, pred_proba=None):
-        # inputs:
-        # predictions: list of predicted classes
-        # actuals: list of ground truth
-        # pred_proba: pd.DataFrame of prediction probability of belonging to each class
-        self.predictions = np.array(predictions)
-        self.actuals = np.array(actuals)
+        self.predictions = predictions
+        self.actuals = actuals
         self.pred_proba = pred_proba
-        if type(self.pred_proba)!=type(None):
-            self.classes_ = list(self.pred_proba.keys())
-        else:
-            self.classes_ = list(set(list(self.predictions)+list(self.actuals)))
+        self.classes_ = set(actuals)
         self.confusion_matrix = None
 
     def confusion(self):
-        # compute confusion matrix for each class in self.classes_
-        # self.confusion_matrix = {self.classes_[i]: {"TP":tp, "TN": tn, "FP": fp, "FN": fn}}
-        # no return variables
-        # write your own code below
-        correct = self.predictions == self.actuals
-        self.acc = float(Counter(correct)[True])/len(correct)
+        if self.confusion_matrix is not None:
+            return self.confusion_matrix
+
         self.confusion_matrix = {}
         for label in self.classes_:
-            tp = Counter(correct & (self.predictions == label))[True]
-            fp = Counter((self.actuals != label) & (self.predictions == label))[True]
-            tn = Counter(correct & (self.predictions != label))[True]
-            fn = Counter((self.actuals == label) & (self.predictions != label))[True]
-            self.confusion_matrix[label] = {"TP":tp, "TN": tn, "FP": fp, "FN": fn}
-        return
+            self.confusion_matrix[label] = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
+
+        for pred, actual in zip(self.predictions, self.actuals):
+            if pred == actual:
+                self.confusion_matrix[actual]["TP"] += 1
+            else:
+                self.confusion_matrix[pred]["FP"] += 1
+                self.confusion_matrix[actual]["FN"] += 1
+
+        return self.confusion_matrix
 
     def accuracy(self):
-        if self.confusion_matrix==None:
+        if self.confusion_matrix is None:
             self.confusion()
+        
+        total_correct = sum(self.confusion_matrix[label]["TP"] for label in self.classes_)
+        total_samples = len(self.actuals)
+        self.acc = total_correct / total_samples
         return self.acc
 
-    def precision(self, target=None, average = "macro"):
-        # compute precision
-        # target: target class (str). If not None, then return precision of target class
-        # average: {"macro", "micro", "weighted"}. If target==None, return average precision
-        # output: prec = float
-        # note: be careful for divided by 0
-
-        if self.confusion_matrix==None:
+    def precision(self, target=None, average="macro"):
+        if self.confusion_matrix is None:
             self.confusion()
+        
         if target in self.classes_:
             tp = self.confusion_matrix[target]["TP"]
             fp = self.confusion_matrix[target]["FP"]
-            if tp+fp == 0:
+            if tp + fp == 0:
                 prec = 0
             else:
                 prec = float(tp) / (tp + fp)
@@ -79,19 +68,14 @@ class my_evaluation:
                     prec += prec_label * ratio
         return prec
 
-    def recall(self, target=None, average = "macro"):
-        # compute recall
-        # target: target class (str). If not None, then return recall of target class
-        # average: {"macro", "micro", "weighted"}. If target==None, return average recall
-        # output: recall = float
-        # note: be careful for divided by 0
-
-        if self.confusion_matrix==None:
+    def recall(self, target=None, average="macro"):
+        if self.confusion_matrix is None:
             self.confusion()
-        if target in self.classes_:
+        
+        if target is not None:
             tp = self.confusion_matrix[target]["TP"]
             fn = self.confusion_matrix[target]["FN"]
-            if tp+fn == 0:
+            if tp + fn == 0:
                 rec = 0
             else:
                 rec = float(tp) / (tp + fn)
@@ -116,22 +100,49 @@ class my_evaluation:
                         raise Exception("Unknown type of average.")
                     rec += rec_label * ratio
         return rec
-
-    def f1(self, target=None, average = "macro"):
-        # compute f1
-        # target: target class (str). If not None, then return f1 of target class
-        # average: {"macro", "micro", "weighted"}. If target==None, return average f1
-        # output: f1 = float
-
-        prec = self.precision(target = target, average=average)
-        rec = self.recall(target = target, average=average)
-        f1_score = 2.0 * prec * rec / (prec + rec)
+    
+    def f1(self, target=None, average="macro"):
+        if target:
+            prec = self.precision(target=target, average=average)
+            rec = self.recall(target=target, average=average)
+            if prec + rec == 0:
+                f1_score = 0
+            else:
+                f1_score = 2.0 * prec * rec / (prec + rec)
+        else:
+            if average == "micro":
+                prec = self.precision(target=None, average=average)
+                rec = self.recall(target=None, average=average)
+                if prec + rec == 0:
+                    f1_score = 0
+                else:
+                    f1_score = 2.0 * prec * rec / (prec + rec)
+            elif average == "macro":
+                f1_score = 0
+                for label in self.classes_:
+                    f1_label = self.f1(target=label)
+                    f1_score += f1_label
+                if len(self.classes_) == 0:
+                    f1_score = 0
+                else:
+                    f1_score /= len(self.classes_)
+            elif average == "weighted":
+                f1_score = 0
+                n = len(self.actuals)
+                for label in self.classes_:
+                    f1_label = self.f1(target=label)
+                    ratio = Counter(self.actuals)[label] / float(n)
+                    f1_score += f1_label * ratio
+            else:
+                 raise Exception("Unknown type of average.")
         return f1_score
+    
+
 
     def auc(self, target):
-        # compute AUC of ROC curve for each class
-        # return auc = {self.classes_[i]: auc_i}, dict
-        if type(self.pred_proba)==type(None):
+        # compute AUC of ROC curve for the target class
+        # return auc = float
+        if type(self.pred_proba) == type(None):
             return None
         else:
             if target in self.classes_:
@@ -145,15 +156,15 @@ class my_evaluation:
                 auc_target = 0
                 for i in order:
                     if self.actuals[i] == target:
-                        tp+=1
-                        fn-=1
-                        tpr = float(tp) / (tp + fn)
+                        tp += 1
+                        fn -= 1
+                        tpr = tp / (tp + fn)
                     else:
-                        fp+=1
-                        tn-=1
+                        fp += 1
+                        tn -= 1
                         pre_fpr = fpr
-                        fpr = float(fp) / (tn + fp)
-                        auc_target += tpr * (fpr - pre_fpr)
+                        fpr = fp / (fp + tn)
+                        auc_target += (fpr - pre_fpr) * tpr
             else:
                 raise Exception("Unknown target class.")
 
