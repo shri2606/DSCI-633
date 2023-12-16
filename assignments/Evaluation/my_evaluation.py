@@ -1,171 +1,94 @@
-from collections import Counter
 import numpy as np
+import pandas as pd
 
 class my_evaluation:
     def __init__(self, predictions, actuals, pred_proba=None):
-        self.predictions = predictions
-        self.actuals = actuals
+        self.predictions = np.array(predictions)
+        self.actuals = np.array(actuals)
         self.pred_proba = pred_proba
-        self.classes_ = set(actuals)
-        self.confusion_matrix = None
+        self.classes_ = sorted(list(set(self.predictions) | set(self.actuals)))
 
-    def confusion(self):
-        if self.confusion_matrix is not None:
-            return self.confusion_matrix
-
-        self.confusion_matrix = {}
-        for label in self.classes_:
-            self.confusion_matrix[label] = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
-
-        for pred, actual in zip(self.predictions, self.actuals):
-            if pred == actual:
-                self.confusion_matrix[actual]["TP"] += 1
-            else:
-                self.confusion_matrix[pred]["FP"] += 1
-                self.confusion_matrix[actual]["FN"] += 1
-
-        return self.confusion_matrix
-
-    def accuracy(self):
-        if self.confusion_matrix is None:
-            self.confusion()
-        
-        total_correct = sum(self.confusion_matrix[label]["TP"] for label in self.classes_)
-        total_samples = len(self.actuals)
-        self.acc = total_correct / total_samples
-        return self.acc
+    def _calc_tp_fp_fn(self, target_class):
+        tp = np.sum((self.predictions == target_class) & (self.actuals == target_class))
+        fp = np.sum((self.predictions == target_class) & (self.actuals != target_class))
+        fn = np.sum((self.predictions != target_class) & (self.actuals == target_class))
+        return tp, fp, fn
 
     def precision(self, target=None, average="macro"):
-        if self.confusion_matrix is None:
-            self.confusion()
-        
-        if target in self.classes_:
-            tp = self.confusion_matrix[target]["TP"]
-            fp = self.confusion_matrix[target]["FP"]
-            if tp + fp == 0:
-                prec = 0
-            else:
-                prec = float(tp) / (tp + fp)
+        def calc_precision(tp, fp):
+            return tp / (tp + fp) if (tp + fp) > 0 else 0
+
+        if target:
+            tp, fp, _ = self._calc_tp_fp_fn(target)
+            return calc_precision(tp, fp)
         else:
-            if average == "micro":
-                prec = self.accuracy()
-            else:
-                prec = 0
-                n = len(self.actuals)
-                for label in self.classes_:
-                    tp = self.confusion_matrix[label]["TP"]
-                    fp = self.confusion_matrix[label]["FP"]
-                    if tp + fp == 0:
-                        prec_label = 0
-                    else:
-                        prec_label = float(tp) / (tp + fp)
-                    if average == "macro":
-                        ratio = 1 / len(self.classes_)
-                    elif average == "weighted":
-                        ratio = Counter(self.actuals)[label] / float(n)
-                    else:
-                        raise Exception("Unknown type of average.")
-                    prec += prec_label * ratio
-        return prec
+            precisions = []
+            for cls in self.classes_:
+                tp, fp, _ = self._calc_tp_fp_fn(cls)
+                precisions.append(calc_precision(tp, fp))
+            return np.mean(precisions) if average == "macro" else np.average(precisions, weights=[self._calc_tp_fp_fn(cls)[0] + self._calc_tp_fp_fn(cls)[2] for cls in self.classes_])
 
     def recall(self, target=None, average="macro"):
-        if self.confusion_matrix is None:
-            self.confusion()
-        
-        if target is not None:
-            tp = self.confusion_matrix[target]["TP"]
-            fn = self.confusion_matrix[target]["FN"]
-            if tp + fn == 0:
-                rec = 0
-            else:
-                rec = float(tp) / (tp + fn)
-        else:
-            if average == "micro":
-                rec = self.accuracy()
-            else:
-                rec = 0
-                n = len(self.actuals)
-                for label in self.classes_:
-                    tp = self.confusion_matrix[label]["TP"]
-                    fn = self.confusion_matrix[label]["FN"]
-                    if tp + fn == 0:
-                        rec_label = 0
-                    else:
-                        rec_label = float(tp) / (tp + fn)
-                    if average == "macro":
-                        ratio = 1 / len(self.classes_)
-                    elif average == "weighted":
-                        ratio = Counter(self.actuals)[label] / float(n)
-                    else:
-                        raise Exception("Unknown type of average.")
-                    rec += rec_label * ratio
-        return rec
-    
-    def f1(self, target=None, average="macro"):
-        if target:
-            prec = self.precision(target=target, average=average)
-            rec = self.recall(target=target, average=average)
-            if prec + rec == 0:
-                f1_score = 0
-            else:
-                f1_score = 2.0 * prec * rec / (prec + rec)
-        else:
-            if average == "micro":
-                prec = self.precision(target=None, average=average)
-                rec = self.recall(target=None, average=average)
-                if prec + rec == 0:
-                    f1_score = 0
-                else:
-                    f1_score = 2.0 * prec * rec / (prec + rec)
-            elif average == "macro":
-                f1_score = 0
-                for label in self.classes_:
-                    f1_label = self.f1(target=label)
-                    f1_score += f1_label
-                if len(self.classes_) == 0:
-                    f1_score = 0
-                else:
-                    f1_score /= len(self.classes_)
-            elif average == "weighted":
-                f1_score = 0
-                n = len(self.actuals)
-                for label in self.classes_:
-                    f1_label = self.f1(target=label)
-                    ratio = Counter(self.actuals)[label] / float(n)
-                    f1_score += f1_label * ratio
-            else:
-                 raise Exception("Unknown type of average.")
-        return f1_score
-    
+        def calc_recall(tp, fn):
+            return tp / (tp + fn) if (tp + fn) > 0 else 0
 
+        if target:
+            tp, _, fn = self._calc_tp_fp_fn(target)
+            return calc_recall(tp, fn)
+        else:
+            recalls = []
+            for cls in self.classes_:
+                tp, _, fn = self._calc_tp_fp_fn(cls)
+                recalls.append(calc_recall(tp, fn))
+            return np.mean(recalls) if average == "macro" else np.average(recalls, weights=[self._calc_tp_fp_fn(cls)[0] + self._calc_tp_fp_fn(cls)[2] for cls in self.classes_])
+
+    def f1(self, target=None, average="macro"):
+        def calc_f1(precision, recall):
+            return 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+        if target:
+            precision = self.precision(target)
+            recall = self.recall(target)
+            return calc_f1(precision, recall)
+        else:
+            f1_scores = []
+            for cls in self.classes_:
+                precision = self.precision(cls)
+                recall = self.recall(cls)
+                f1_scores.append(calc_f1(precision, recall))
+            return np.mean(f1_scores) if average == "macro" else np.average(f1_scores, weights=[self._calc_tp_fp_fn(cls)[0] + self._calc_tp_fp_fn(cls)[2] for cls in self.classes_])
+
+    # ... [AUC implementation] ...
 
     def auc(self, target):
-        # compute AUC of ROC curve for the target class
-        # return auc = float
-        if type(self.pred_proba) == type(None):
+        if self.pred_proba is None or target not in self.classes_:
             return None
-        else:
-            if target in self.classes_:
-                order = np.argsort(self.pred_proba[target])[::-1]
-                tp = 0
-                fp = 0
-                fn = Counter(self.actuals)[target]
-                tn = len(self.actuals) - fn
-                tpr = 0
-                fpr = 0
-                auc_target = 0
-                for i in order:
-                    if self.actuals[i] == target:
-                        tp += 1
-                        fn -= 1
-                        tpr = tp / (tp + fn)
-                    else:
-                        fp += 1
-                        tn -= 1
-                        pre_fpr = fpr
-                        fpr = fp / (fp + tn)
-                        auc_target += (fpr - pre_fpr) * tpr
-            else:
-                raise Exception("Unknown target class.")
 
-            return auc_target
+        
+        actuals_target = (self.actuals == target).astype(int)
+        probas_target = self.pred_proba[target]
+        sorted_indices = np.argsort(probas_target)[::-1]
+        sorted_actuals = actuals_target[sorted_indices]
+        
+        
+        tpr = []
+        fpr = []
+        positive_count = np.sum(actuals_target)
+        negative_count = len(actuals_target) - positive_count
+        tp = 0
+        fp = 0
+        for i in range(len(sorted_actuals)):
+            if sorted_actuals[i] == 1:
+                tp += 1
+            else:
+                fp += 1
+            tpr.append(tp / positive_count if positive_count else 0)
+            fpr.append(fp / negative_count if negative_count else 0)
+
+        
+        auc = 0.0
+        for i in range(1, len(fpr)):
+            auc += (fpr[i] - fpr[i - 1]) * (tpr[i] + tpr[i - 1]) / 2
+        return auc
+
+
